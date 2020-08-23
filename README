@@ -1,10 +1,3 @@
-Group Info and Contribution:-
-2017csb1070(Anmol)  :- GUI,memory access stage,Memory File,phase1(file handling),Errors & Exception handling
-2018csb1090(Gazal)  :- phase1(file handling-generation of basic code),encoder(S,SB format)
-2018csb1074(Arjav)  :- Decode stage(R,I formats),Write back stage,Encoding(U format)
-2018csb1078(Ayush)  :- phase1(file handling-generation of original code),encoder(R,I)
-2018csb1083(Deepak) :- Decode stage(S,SB,U,UJ formats),ALU stage,fetch,Encoding(UJ format),Register File
-
 Language  :- Python,HTML,css,Javascript
 Framework :- Flask
 
