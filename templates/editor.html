@@ -1,0 +1,108 @@
+<div class="container">
+    <form class="form-inline">
+        <div class="form-group">
+            <label for="pipeline"><span style="font-size: medium;">Pipeline:</span></label>
+            <select class="form-control" id="pipeline">
+                <option selected value="True">Enable</option>
+                <option value="False">Disable</option>
+            </select>
+        </div>
+        &emsp;
+        <div class="form-group">
+            <label for="forwarding"><span style="font-size: medium;">Forwarding:</span></label>
+            <select class="form-control" id="forwarding">
+                <option selected value="True">Forwarding</option>
+                <option value="False">Stalling</option>
+            </select>
+        </div>
+        &emsp;
+        <div class="form-group">
+            <label for="branch_prediction"><span style="font-size: medium;">Branch Prediction:</span></label>
+            <select class="form-control" id="branch_prediction">
+                <option selected value="True">Enable</option>
+                <option value="False">Disable</option>
+            </select>
+        </div>
+        &emsp;
+        <div class="form-group">
+            <label for="pipeline_register"><span style="font-size: medium;">Pipeline Register:</span></label>
+            <select class="form-control" id="pipeline_register">
+                <option selected value="False">Do not Print</option>
+                <option value="True">Print</option>
+            </select>
+        </div>
+        &emsp;
+        <div class="form-group">
+            <label for="specialInstruction"><span style="font-size: medium;">Special Instruction:</span></label>
+            <input type="number" id="specialInstruction" class="form-control" placeholder="Instruction No:">
+        </div>
+    </form>
+    <form>
+        <textarea class="form-control" rows="15" id="text"></textarea>
+    </form>
+    <button id="assemble" type="submit" class="btn btn-primary">Assemble & Simulate</button>
+</div>
+<script>
+    $('#assemble').click(function () {
+        var info = {};
+        info["pipeline"] = $('#pipeline').val();
+        info["forwarding"] = $('#forwarding').val();
+        info["branch_prediction"] = $('#branch_prediction').val();
+        info["pipeline_register"] = $('#pipeline_register').val();
+        info["specialInstruction"] = $('#specialInstruction').val();
+        info["text"] = $('#text').val();
+        console.log(info);
+        $.ajax({
+            url: "{{ url_for('assemble') }}",
+            type: 'POST',
+            contentType: 'application/json; charset=utf-8',
+            data: JSON.stringify(info),
+            dataType: "json",
+            success: function (data) {
+                // console.log(data.info)
+                if (data.success == 'pass') {
+                    var x;
+                    var info = data.info;
+                    if (Object.keys(info).length == 0) {
+                        x = '<tr>' +
+                            '<td id =""></td>' +
+                            '<td></td>' +
+                            '<td></td>' +
+                            '<td></td>' +
+                            '</tr>';
+                    }
+                    else {
+                        for (i in info) {
+                            x = x + '<tr>' +
+                                '<td id ="">0x' + info[i][0] + '</td>' +
+                                '<td>0x' + info[i][1] + '</td>' +
+                                '<td>' + info[i][2] + '</td>' +
+                                '<td>' + info[i][3] + '</td>' +
+                                '</tr>';
+                        }
+                    }
+                    $('#main_table').html(x);
+                    $('#main_table td').each(function () {
+                        $(this).attr('id', $(this).text());
+                    });
+                    // next_instruction();
+                    refresh_register();
+                    refresh_memory();
+                    $('#run').show();
+                    $('#step').show();
+                    $('#prev').show();
+                    $('#reset').show();
+                    $('#dump').show();
+                }
+                else {
+                    alert(data.success);
+                    $('#run').hide();
+                    $('#step').hide();
+                    $('#prev').hide();
+                    $('#reset').hide();
+                    $('#dump').hide();
+                }
+            }
+        });
+    });
+</script>

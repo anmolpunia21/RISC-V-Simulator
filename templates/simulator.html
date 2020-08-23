@@ -1,0 +1,618 @@
+<div class="container">
+    <div class="row ">
+        <div class="col">
+            <div>
+                <button type="submit" class="btn btn-success" onclick="return run()">Run</button>
+                <button type="submit" class="btn btn-secondary" onclick="return step()">Step</button>
+                <button type="submit" class="btn btn-danger" onclick="return reset()">Reset</button>
+                <button type="submit" class="btn btn-warning" onclick="return dump()">Dump</button>
+                <button type="submit" class="btn btn-secondary" onclick="return exit()">Exit</button>
+            </div>
+            <div style="height:440px;overflow:auto;">
+                <table class="table" style="font-size: 14px;">
+                    <thead style="background-color: #dadde0;">
+                        <tr>
+                            <th>PC</th>
+                            <th>Machine Code</th>
+                            <th>Basic Code</th>
+                            <th>Original Code</th>
+                        </tr>
+                    </thead>
+                    <tbody id='main_table'>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col">
+            <div>
+                Display:
+                <button type="submit" class="btn btn-secondary" onclick="return Display('hex')">HEX</button>
+                <button type="submit" class="btn btn-secondary" onclick="return Display('decimal')">Decimal</button>
+                <button type="submit" class="btn btn-secondary" onclick="return Display('ascii')">ASCII</button>
+                <button type="submit" class="btn btn-success" onclick="memory_section('text')">Text</button>
+                <button type="submit" class="btn btn-success" onclick="memory_section('data')">Data</button>
+                <button type="submit" class="btn btn-success" onclick="memory_section('heap')">Heap</button>
+                <button type="submit" class="btn btn-success" onclick="memory_section('stack')">Stack</button>
+            </div>
+            <div class="row">
+                <div class="col-5" style="height:440px;overflow:auto;">
+                    <table class="table" style="font-size: 14px;">
+                        <thead style="background-color: #dadde0;">
+                            <tr>
+                                <th>No.</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody id="register">
+                            {%for key,value in register.items() %}
+                            <tr>
+                                <td>x{{key}}</td>
+                                <td>{{value}}</td>
+                            </tr>
+                            {%endfor%}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="col-7" style="height:440px;overflow:auto;">
+                    <table class="table" style="font-size: 14px;">
+                        <thead>
+                            <tr style="background-color: #dadde0;">
+                                <th>Address</th>
+                                <th>+0</th>
+                                <th>+1</th>
+                                <th>+2</th>
+                                <th>+3</th>
+                            </tr>
+                        </thead>
+                        <tbody id="memory">
+                            {%for key,value in memory.items() %}
+                            <tr>
+                                <td>0x{{key}}</td>
+                                <td>{{memory[key][0]}}</td>
+                                <td>{{memory[key][1]}}</td>
+                                <td>{{memory[key][2]}}</td>
+                                <td>{{memory[key][3]}}</td>
+                            </tr>
+                            {%endfor%}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    function Display(view) {
+        $.ajax({
+            url: "{{ url_for('display') }}",
+            type: 'POST',
+            data: { input: view },
+            success: function (data) {
+                // location.reload();
+                refresh_register();
+                refresh_memory();
+
+            }
+        });
+    }
+    function loadDiagram() {
+        $.ajax({
+            url: "{{ url_for('diagram') }}",
+            type: 'POST',
+            success: function (info) {
+                // console.log(info);
+                var t = '';
+                var x = {};
+                loadBlockDiagram(info.path)
+                for (let i = 0; i <= info.count; i++) {
+                    x[i * 4] = {}
+                }
+                for (let j = 0; j < Object.keys(info.data).length; j++) {
+                    Object.keys(info.data[j]).forEach(function (key) {
+                        if (key) {
+                            x[info.data[j][key]][j] = key;
+                        }
+                        else {
+                            x[info.data[j][key]][j] = '0';
+                        }
+                    });
+                }
+                t = '<table class="table" style="font-size: 14px;"><thead style="background-color: #dadde0;"><tr><th>PC</th>';
+                for (let index = 1; index <= Object.keys(info.data).length; index++) {
+                    t = t + '<th>' + index.toString() + '</th>';
+                }
+                t = t + '</tr></thead><tbody>';
+                for (let j = 0; j <= info.count; j++) {
+                    t = t + '<tr><td style="background-color: #dadde0;">' + (j * 4).toString() + '</td>';
+                    for (let index = 0; index < Object.keys(info.data).length; index++) {
+                        if (x[j * 4][index] == 'IF') {
+                            t = t + '<td style="background-color: #61ff88;">' + x[j * 4][index] + '</td>';
+                        }
+                        else if (x[j * 4][index] == 'ID') {
+                            t = t + '<td style="background-color: #4fff7b;">' + x[j * 4][index] + '</td>';
+                        }
+                        else if (x[j * 4][index] == 'EX') {
+                            t = t + '<td style="background-color: #39f96e;">' + x[j * 4][index] + '</td>';
+                        }
+                        else if (x[j * 4][index] == 'MEM') {
+                            t = t + '<td style="background-color: #1ceb61;">' + x[j * 4][index] + '</td>';
+                        }
+                        else if (x[j * 4][index] == 'WB') {
+                            t = t + '<td style="background-color: #00dd54;">' + x[j * 4][index] + '</td>';
+                        }
+                        else {
+                            t = t + '<td></td>';
+                        }
+                    }
+                    t = t + '</tr>';
+                }
+                t = t + '</tbody';
+                $('#pipeline_table').html(t);
+            }
+        });
+    }
+    function loadBlockDiagram(forwarding_type) {
+        path = "../static/images/" + forwarding_type + ".png";
+        // console.log(path);
+        t = '<img src=' + path + ' style="width:100%;height: 440px;">';
+        $('#blockdiagram').html(t);
+    }
+    function loadCycleInfo() {
+        $.ajax({
+            url: "{{ url_for('cycleinfo') }}",
+            type: 'POST',
+            success: function (data) {
+                t = '<div><h3><span class="label label-default">FETCH</span></h3>';
+                if (data.IF_pc != -1) {
+                    t = t + '<p><strong>PC:</strong>' + (data.IF_pc).toString() + '<br/>' +
+                        '<strong>Instruction:</strong>' + getBasicCode_PC(data.IF_pc, '#61ff88') + '<p>';
+                }
+                else {
+                    t = t + '<p><strong>PC:</strong><br/>' +
+                        '<strong>Instruction:</strong><p>';
+                }
+
+                t = t + '<h3><span class="label label-default">DECODE</span></h3>';
+                if (data.ID_pc != -1) {
+                    t = t + '<p><strong>PC:</strong>' + (data.ID_pc).toString() + '<br/>' +
+                        '<strong>Instruction:</strong>:' + getBasicCode_PC(data.ID_pc, '#4fff7b') + '<br/>' +
+                        '<strong>Hazard:</strong>' + data.hazard + '<p>';
+                }
+                else {
+                    t = t + '<p><strong>PC:</strong><br/>' +
+                        '<strong>Instruction:</strong><br/>' +
+                        '<strong>Hazard:</strong><p>';
+                }
+                t = t + '<h3><span class="label label-default">ALU</span></h3>';
+                if (data.EX_pc != -1) {
+                    t = t + '<p><strong>PC:</strong>' + (data.EX_pc).toString() + '<br/>' +
+                        '<strong>Instruction:</strong>' + getBasicCode_PC(data.EX_pc, '#39f96e') + '<br/>' +
+                        '<strong>Predictor Result:</strong>' + data.prediction + '</p>';
+                }
+                else {
+                    t = t + '<p><strong>PC:</strong><br/>' +
+                        '<strong>Instruction:</strong><br/>' +
+                        '<strong>Predictor Result:</strong>' + data.prediction + '</p>';
+                }
+                t = t + '<h3><span class="label label-default">MEMORY</span></h3>';
+                if (data.MEM_pc != -1) {
+                    t = t + '<p><strong>PC:</strong>' + (data.MEM_pc).toString() + '<br/>' +
+                        '<strong>Instruction:</strong>' + getBasicCode_PC(data.MEM_pc, '#1ceb61') + '</p>';
+                }
+                else {
+                    t = t + '<p><strong>PC:</strong><br/>' +
+                        '<strong>Instruction:</strong></p>';
+                }
+                t = t + '<h3><span class="label label-default">WRITE BACK</span></h3>';
+                if (data.WB_pc != -1) {
+                    t = t + '<p><strong>PC:</strong>' + (data.WB_pc).toString() + '<br/>' +
+                        '<strong>Instruction:</strong>' + getBasicCode_PC(data.WB_pc, '#00dd54') + '</p>';
+                }
+                else {
+                    t = t + '<p><strong>PC:</strong><br/>' +
+                        '<strong>Instruction:</strong></p>';
+                }
+                t = t + '</div>';
+                // console.log(data);
+                $('#cycle_info').html(t);
+                $('#total_cycles').html(data.total_cycles);
+                $('#total_instr').html(data.total_instr);
+                $('#CPI').html(data.CPI);
+                $('#total_alu_instr').html(data.total_alu_instr);
+                $('#total_data_instr').html(data.total_data_instr);
+                $('#total_control_instr').html(data.total_control_instr);
+                $('#total_data_hazard').html(data.total_data_hazard);
+                $('#total_control_hazard').html(data.total_control_hazard);
+                $('#total_misprediction').html(data.total_misprediction);
+                $('#total_stalls').html(data.total_stalls);
+                $('#total_data_stalls').html(data.total_data_stalls);
+                $('#total_control_stalls').html(data.total_control_stalls);
+            }
+        });
+    }
+    function run() {
+        var type = 'run';
+        $('#pipeline_table').html('<div style="display:flex;justify-content:center;align-items:center"><div class="loadingio-spinner-dual-ball-v2zvjs5ngq"><div class="ldio-l113f2noog"><div></div><div></div><div></div></div></div></div>');
+        $.ajax({
+            url: "{{ url_for('simulate') }}",
+            type: 'POST',
+            data: { input: type },
+            success: function (data) {
+                if (data.success == 'EXIT') {
+                    // next_instruction();
+                    refresh_register();
+                    refresh_memory();
+                    loadDiagram();
+                    loadBlockDiagram();
+                    loadCycleInfo();
+                    // console.log(data.cycle)
+                    if (data.cycle == 0) {
+                        // alert('Click the Assemble & Simulate.');
+                    }
+                    else {
+                        // alert('Code Executed Succesfully.\nTotal Cycle:' + data.cycle);
+                    }
+                }
+                if (data.success == 'BREAKPOINT') {
+                    // next_instruction();
+                    refresh_register();
+                    refresh_memory();
+                    loadDiagram();
+                    loadBlockDiagram();
+                    loadCycleInfo();
+                    alert('Code Executed Till Breakpoint.\nTotal Cycle:' + data.cycle);
+
+                }
+            }
+        });
+    }
+    function step() {
+        var type = 'step';
+        $('#pipeline_table').html('<div style="display:flex;justify-content:center;align-items:center"><div class="loadingio-spinner-dual-ball-v2zvjs5ngq"><div class="ldio-l113f2noog"><div></div><div></div><div></div></div></div></div>');
+        $.ajax({
+            url: "{{ url_for('simulate') }}",
+            type: 'POST',
+            data: { input: type },
+            success: function (data) {
+                // next_instruction();
+                refresh_register();
+                refresh_memory();
+                loadDiagram();
+                loadCycleInfo();
+                if (data.success != 'update') {
+                    if (data.cycle == 0) {
+                        // alert('Click the Assemble & Simulate.');
+                    }
+                    else {
+                        // alert('Code Executed Succesfully.\nTotal Cycle:' + data.cycle);
+                    }
+                }
+            }
+        });
+
+    }
+    function reset() {
+        var type = 'reset';
+        $.ajax({
+            url: "{{ url_for('simulate') }}",
+            type: 'POST',
+            data: { input: type },
+            success: function (data) {
+                next_instruction();
+                refresh_register();
+                refresh_memory();
+                loadDiagram();
+            }
+        });
+    }
+    function dump() {
+        var type = 'dump';
+        $.ajax({
+            url: "{{ url_for('simulate') }}",
+            type: 'POST',
+            data: { input: type },
+            success: function (data) {
+                // console.log(data.success);
+                alert('Machine code copied to clipboard');
+                var copyText = data.success;
+                // copyText.select();
+                // copyText.setSelectionRange(0, 99999)
+                // document.execCommand("copy");
+                // alert("Copied the text: " + copyText.value);
+                let copyFrom = document.createElement("textarea");
+                document.body.appendChild(copyFrom);
+                copyFrom.textContent = data.success;
+                copyFrom.select();
+                document.execCommand("copy");
+                copyFrom.remove();
+            }
+        });
+    }
+    function exit() {
+        $.ajax({
+            url: "{{ url_for('exit_') }}",
+            type: 'GET',
+            success: function (data) {
+                alert(data.success);
+            }
+        });
+    }
+    function next_instruction() {
+        $.ajax({
+            url: "{{ url_for('next_instruction') }}",
+            type: 'GET',
+            success: function (data) {
+                var basic_code;
+                var machine_code;
+                var original_code;
+                var x = 0;
+                $('#main_table td').each(function () {
+                    var id = $(this).attr('id');
+                    // console.log(id);
+                    if (id == '0x' + data.IF_pc && x == 0) {
+                        $(this).css('background', '#00d1b2');
+                        x = x + 1;
+                    }
+                    else if (x == 4) {
+                        x = 0;
+                        return;
+                    }
+                    else {
+                        $(this).css('background', 'white');
+                        if (x == 1) {
+                            $(this).css('background', '#00d1b2');
+                            machine_code = $(this).text();
+                            x = x + 1;
+                        }
+                        else if (x == 2) {
+                            $(this).css('background', '#00d1b2');
+                            basic_code = $(this).text();
+                            x = x + 1;
+                        }
+                        else if (x == 3) {
+                            $(this).css('background', '#00d1b2');
+                            original_code = $(this).text();
+                            x = x + 1;
+                        }
+
+                    }
+                });
+                var next_instruction = '<tr>' +
+                    '<td scope="row">0x' + data.pc + '</td>' +
+                    '<td scope="row">' + machine_code + '</td>' +
+                    '<td scope="row">' + basic_code + '</td>' +
+                    '<td scope="row">' + original_code + '</td>' +
+                    '</tr>';
+                $('#next_instruction').html(next_instruction);
+            }
+        });
+    }
+    function prev_instruction() {
+        $.ajax({
+            url: "{{ url_for('prev_instruction') }}",
+            type: 'GET',
+            success: function (data) {
+                var basic_code;
+                var machine_code;
+                var original_code;
+                var x = 0;
+                $('#main_table td').each(function () {
+                    var id = $(this).attr('id');
+                    $(this).css('background', 'white');
+                    if (id == '0x' + data.pc) {
+                        if (x == 0) {
+                            $(this).css('background', '#00d1b2');
+                            x = x + 1;
+                        }
+                    }
+                    else if (x == 4) {
+                        x = 0;
+                        return;
+                    }
+                    else {
+                        if (x == 1) {
+                            $(this).css('background', '#00d1b2');
+                            machine_code = $(this).text();
+                            x = x + 1;
+                        }
+                        else if (x == 2) {
+                            $(this).css('background', '#00d1b2');
+                            basic_code = $(this).text();
+                            x = x + 1;
+                        }
+                        else if (x == 3) {
+                            $(this).css('background', '#00d1b2');
+                            original_code = $(this).text();
+                            x = x + 1;
+                        }
+                    }
+                });
+                var next_instruction = '<tr>' +
+                    '<td scope="row">0x' + data.pc + '</td>' +
+                    '<td scope="row">' + machine_code + '</td>' +
+                    '<td scope="row">' + basic_code + '</td>' +
+                    '<td scope="row">' + original_code + '</td>' +
+                    '</tr>';
+                $('#next_instruction').html(next_instruction);
+            }
+        });
+    }
+    function refresh_register() {
+        $.ajax({
+            url: "{{ url_for('refresh_register') }}",
+            type: 'GET',
+            success: function (data) {
+                // alert(data.success);
+                var t = '';
+                var register = data.success;
+                var view = data.view;
+                if (view == 'hex') {
+                    for (register_i in register) {
+                        t = t + '<tr>' + '<td scope="row">x' + register_i + '</td>' + '<td>0x' + register[register_i].toUpperCase() + '</td></tr>'
+                    }
+                    // alert(t);
+                    $('#register').html(t);
+                }
+                else if (view == 'decimal') {
+                    for (register_i in register) {
+                        t = t + '<tr>' + '<td scope="row">x' + register_i + '</td>' + '<td>' + hex2Int(register[register_i]) + '</td></tr>';
+                    }
+                    // alert(t);
+                    $('#register').html(t);
+                }
+                else if (view == 'ascii') {
+                    for (register_i in register) {
+                        t = t + '<tr>' + '<td scope="row">x' + register_i + '</td>' + '<td>' + hex2a(register[register_i]) + '</td></tr>';
+                    }
+                    // alert(t);
+                    $('#register').html(t);
+                }
+            }
+        });
+    }
+    function refresh_memory() {
+        $.ajax({
+            url: "{{ url_for('refresh_memory') }}",
+            type: 'GET',
+            success: function (data) {
+                var t = '';
+                var unordered_memory = data.success;
+                var memory = {};
+                Object.keys(unordered_memory).sort(function (a, b) { return hex2Int(a) - hex2Int(b) }).forEach(function (key) {
+                    memory[hex2Int(key)] = unordered_memory[key];
+                });
+                var view = data.view;
+                var dataview = data.dataview;
+                var lower = 0;
+                var upper = 2147483644;
+                if (dataview == 'text') {
+                    lower = 0;
+                    upper = 268435452;
+                }
+                else if (dataview == 'data') {
+                    lower = 268435456;
+                    upper = 268468196;
+                }
+                else if (dataview == 'heap') {
+                    lower = 268468200;
+                    upper = 1207975924;
+                }
+                else if (dataview == 'stack') {
+                    lower = 1207975928;
+                    upper = 2147483644;
+                }
+                else if (dataview == 'jump') {
+                    lower = data.address;
+                    upper = data.address;
+                }
+                if (view == 'hex' || view == '') {
+                    for (key in memory) {
+                        if ((key) >= lower && (key) <= upper) {
+                            t = t + '<tr>' +
+                                '<td scope="row">0x' + Number(key).toString(16).padStart(8, "0").toUpperCase() + '</td>' +
+                                '<td>' + memory[key][0].toUpperCase() + '</td>' +
+                                '<td>' + memory[key][1].toUpperCase() + '</td>' +
+                                '<td>' + memory[key][2].toUpperCase() + '</td>' +
+                                '<td>' + memory[key][3].toUpperCase() + '</td>' +
+                                '</tr>';
+                        }
+                    }
+                    $('#memory').html(t);
+                }
+                else if (view == 'decimal') {
+                    for (key in memory) {
+                        if ((key) >= lower && (key) <= upper)
+                            t = t + '<tr>' +
+                                '<td scope="row">0x' + Number(key).toString(16).padStart(8, "0").toUpperCase() + '</td>' +
+                                '<td>' + hex2Int(memory[key][0]) + '</td>' +
+                                '<td>' + hex2Int(memory[key][1]) + '</td>' +
+                                '<td>' + hex2Int(memory[key][2]) + '</td>' +
+                                '<td>' + hex2Int(memory[key][3]) + '</td>' +
+                                '</tr>';
+                    }
+                    $('#memory').html(t);
+                }
+                else if (view == 'ascii') {
+                    for (key in memory) {
+                        if ((key) >= lower && (key) <= upper)
+                            t = t + '<tr>' +
+                                '<td scope="row">0x' + Number(key).toString(16).padStart(8, "0").toUpperCase() + '</td>' +
+                                '<td>' + hex2a(memory[key][0]) + '</td>' +
+                                '<td>' + hex2a(memory[key][1]) + '</td>' +
+                                '<td>' + hex2a(memory[key][2]) + '</td>' +
+                                '<td>' + hex2a(memory[key][3]) + '</td>' +
+                                '</tr>';
+                    }
+                    $('#memory').html(t);
+                }
+            }
+        });
+    }
+    function memory_section(section) {
+        $.ajax({
+            url: "{{ url_for('memory_section') }}",
+            type: 'POST',
+            data: { input: section },
+            success: function (data) {
+                refresh_memory();
+            }
+        });
+    }
+    function hex2a(hexx) {
+        var hex = hexx.toString();//force conversion
+        var deci = hex2Int(hex);
+        var str = '';
+        if (deci >= 32 && deci <= 127) {
+            return String.fromCharCode(deci);
+        }
+        return '0x' + hexx;
+    }
+    function hex2Int(hex) {
+        if (hex.length % 2 != 0) {
+            hex = "0" + hex;
+        }
+        var num = parseInt(hex, 16);
+        var maxVal = Math.pow(2, hex.length / 2 * 8);
+        if (num > maxVal / 2 - 1) {
+            num = num - maxVal
+        }
+        return num;
+    }
+    function getBasicCode_PC(pc, color) {
+        var x = 0;
+        var basic_code = '';
+        $('#main_table td').each(function () {
+            var id = $(this).attr('id');
+            if (id == '0x' + pc.toString(16).toUpperCase() && x == 0) {
+                $(this).css('background', color);
+                x = x + 1;
+            }
+            else if (x == 4) {
+                x = 0;
+                // console.log(basic_code);
+                // break;
+            }
+            else if (x == 1 || x == 2 || x == 3) {
+                if (x == 1) {
+                    $(this).css('background', color);
+                    machine_code = $(this).text();
+                    x = x + 1;
+                }
+                else if (x == 2) {
+                    $(this).css('background', color);
+                    basic_code = $(this).text();
+                    x = x + 1;
+                }
+                else if (x == 3) {
+                    $(this).css('background', color);
+                    original_code = $(this).text();
+                    x = x + 1;
+                }
+            }
+            else {
+                $(this).css('background', 'white');
+            }
+        });
+        return basic_code;
+    }
+</script>
